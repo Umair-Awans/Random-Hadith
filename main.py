@@ -1,83 +1,112 @@
 import requests, random
+from threading import Thread
+from queue import Queue, Empty
+
+API_URL = "https://hadithapi.com/public/api/hadiths"
+NUM_PAGES = 5  # How many pages to fetch
+NUM_SHOWN = 0
+
 
 def get_api_key():
     try:
         with open("API_KEY.txt", 'r') as file:
-            key = file.read().strip()
-            return key
+            return file.read().strip()
     except FileNotFoundError:
-        print("\nError! API KEY file could not be found\n.")
+        print("API_KEY.txt missing!")
         return None
+        
+
+# 🧵 PRODUCER: Fetch pages and put into queue
+def producer(queue, API_KEY):
+    for i in range(NUM_PAGES):
+        page = random.randint(1, 100)
+        # print(f"\nFetching page {page}...\n")
+        try:
+            response = requests.get(API_URL, params={"apiKey": API_KEY, "page": page})
+            response.raise_for_status()
+            data = response.json()
+            for Hadith in data["hadiths"]["data"]:
+                queue.put(Hadith)
+        except ConnectionError:
+            print("\nUnable to connect. Please check your internet connection.\n")
+        except Exception as e:
+            print(f"Error fetching page {page}: {e}")
+    queue.put(None)  # Sentinel to tell consumer: Done
 
 
-def get_data(API_KEY, page_no=None):
-    BASE_URL = "https://hadithapi.com/public/api/hadiths"    
-
-    params = {
-        "apiKey": API_KEY
-    }
-
-    if page_no:
-        params["page"] = page_no
-
-    try:
-        response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()
-        return response.json()
-    except Exception as err:
-        print(f"\nError: {err}\n")
+# 📦 Helper to extract useful info
+def get_details(Hadith: dict):
+    return (
+        Hadith.get("bookSlug", ""),
+        Hadith.get("chapter", {}).get("chapterEnglish", ""),
+        Hadith.get("chapter", {}).get("chapterNumber", ""),
+        Hadith.get("status", "")
+    )
 
 
-def fetch_Hadith_Shareef(API_KEY):  
-    data_one = get_data(API_KEY)
-    if not data_one:
-        return
-
-    total_pages = data_one["hadiths"]["last_page"]
-    page = random.randint(1, total_pages)
-
-    data = get_data(API_KEY, page) or data_one
-
-    list_Hadiths = data["hadiths"]["data"]
-    num = random.randint(0, len(list_Hadiths) - 1)
-    return list_Hadiths[num]
+def is_complete(Hadith):
+    if not all([Hadith.get("headingEnglish"), Hadith.get("englishNarrator"), Hadith.get("hadithEnglish")]):
+        return False
+    if not all(get_details(Hadith)):
+        return False
+    return True
 
 
-def display_Hadith_Shareef(Hadith_Shareef):
-    print()
-    if Hadith_Shareef.get("headingEnglish"):
-        print(Hadith_Shareef["headingEnglish"])
-    print()
-    print(Hadith_Shareef["englishNarrator"])
-    print()
-    print(Hadith_Shareef["hadithEnglish"])
-    print()
+def display_Hadith(Hadith: dict):
+    heading, Narrator, english_Hadith = Hadith["headingEnglish"], Hadith["englishNarrator"], Hadith["hadithEnglish"]
+    book, chapter, chap_no, status = get_details(Hadith)
+    book = book.replace("-", " ").title()
+    content = (
+        "\n" + "=" * 50 + "\n"
+        f"\nHeading: {heading}\n"
+        f"\nNarrator: {Narrator}\n"
+        f"\nHadith: {english_Hadith}\n"
+        f"\nBook: {book}"
+        f"\nChapter {chap_no}: {chapter}"
+        f"\nStatus: {status}" +
+        "\n\n" + "=" * 50 + "\n\n"
+    )
+    print(content)
 
-    book = Hadith_Shareef["bookSlug"]
-    chapter = Hadith_Shareef["chapter"]["chapterEnglish"]
-    chapter_no = Hadith_Shareef["chapter"]["chapterNumber"]
-    statusHadith = Hadith_Shareef["status"]
 
-    print(f"Book: {book}")
-    print(f"Chapter no. {chapter_no}: {chapter}")
-    print(f"Status: {statusHadith}")
-    print()
-
+# 🧵 CONSUMER: Filter and display Hadiths from queue
+def consumer(queue: Queue):
+    global NUM_SHOWN
+    while True:
+        try:
+            Hadith = queue.get(timeout=10)
+            if Hadith is None:
+                break  # Done
+            if is_complete(Hadith):
+                display_Hadith(Hadith)
+                NUM_SHOWN += 1
+                if input("\nShow another Hadith? (Y/N): ").strip().lower().startswith('n'):
+                    break
+        except Empty:
+            break
+        
 
 def main():
     API_KEY = get_api_key()
     if not API_KEY:
-        print("\nAPI key is missing. Please ensure 'API_KEY.txt' exists.\n")
         return
-    print("\nConnecting to Hadith server... Please wait.\n")
-    while True:        
-        Hadith_Shareef = fetch_Hadith_Shareef(API_KEY)
-        if not Hadith_Shareef:
-            print("\nUnable to fetch Hadith. Trying again....\n")
-            continue
-        display_Hadith_Shareef(Hadith_Shareef)
-        again = input("Show another? (Y/N): ").strip().lower()
-        if again.startswith('n'):
-            break
 
-main()
+    print("\nConnecting to Hadith server...\n")
+    queue = Queue()
+    
+    producer_thread = Thread(target=producer, args=(queue, API_KEY))
+    consumer_thread = Thread(target=consumer, args=(queue,))
+
+    producer_thread.start()
+    consumer_thread.start()
+
+    producer_thread.join()
+    consumer_thread.join()
+    if NUM_SHOWN == 0:
+        print("\nNo complete Hadith found. Try again...\n")
+
+    print("\nHave a nice day!\n")
+
+
+if __name__ == "__main__":
+    main()
