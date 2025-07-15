@@ -1,14 +1,14 @@
-# 📚 Random Hadith Fetcher  
+# 🕌  Hadith Viewer — A Simple Way to Read the Words of the Prophet ﷺ  
 *A Multithreaded Python Tool with Clean Output*
 
-A simple yet powerful Python script that fetches random Hadiths from [HadithAPI](https://hadithapi.com/) using a **producer-consumer threading model**. The displayed Hadiths are well-formatted, and only valid (complete) ones are shown.
+A simple yet powerful Python script that retrieves random Hadiths from [HadithAPI](https://hadithapi.com/) using a **producer-consumer threading model**. The displayed Hadiths are well-formatted, and only valid (complete) ones are shown.
 
 ---
 
 ## ✨ Features
 
 - 🧵 **Multithreaded design**  
-  Producer fetches Hadiths, Consumer displays them
+  Producer retrieves Hadiths, Consumer displays them
 - ✅ Only **complete Hadiths** are shown  
   (Heading, Narrator, Text, Book, Chapter, and Status)
 - 📦 **Clean output** with headings
@@ -24,7 +24,7 @@ A simple yet powerful Python script that fetches random Hadiths from [HadithAPI]
 ## 🧠 How It Works
 
 ### 🧵 Producer Thread
-Fetches Hadiths from `NUM_PAGES` random pages using HadithAPI and puts each Hadith into a queue.
+Retrieves Hadiths from `NUM_PAGES` random pages using HadithAPI and puts each Hadith into a queue.
 
 ### 🧵 Consumer Thread
 Reads Hadiths from the queue one-by-one, validates them, and displays formatted output to the user.
